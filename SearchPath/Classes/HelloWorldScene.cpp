@@ -184,7 +184,7 @@ bool HelloWorld::init()
             b2FixtureDef fixtureDef;
             fixtureDef.shape = & shape;
             fixtureDef.density = 0.0f;
-            fixtureDef.friction = 1.0f;
+            fixtureDef.friction = 10.0f;
             fixtureDef.restitution = 0.0f;
             //fixtureDef.filter.groupIndex = -8;
             
@@ -229,6 +229,8 @@ bool HelloWorld::onTouchBegan(Touch* touch, Event* event){
 bool HelloWorld::MouseDown(const b2Vec2& p)
 {
     m_point = p;
+    mBallBody->SetAngularVelocity(0);
+
     return true;
 }
 void HelloWorld::moveBall()
@@ -284,6 +286,17 @@ bool HelloWorld::myFunc2(float x, float y)
 void HelloWorld::BeginContact(b2Contact* contact)
 {
     //B2_NOT_USED(contact);
+    
+}
+
+void HelloWorld::EndContact(b2Contact* contact)
+{
+   mBallBody->SetAngularVelocity(0);
+}
+
+void HelloWorld::PreSolve(b2Contact* contact, const b2Manifold* oldManifold)
+{
+    
     b2Vec2 _ball;
     b2Vec2 _obj;
     if (mBallBody == contact->GetFixtureA()->GetBody()) {
@@ -293,7 +306,7 @@ void HelloWorld::BeginContact(b2Contact* contact)
     else
     {
         _obj = contact->GetFixtureA()->GetBody()->GetPosition();
-         _ball = contact->GetFixtureB()->GetBody()->GetPosition();
+        _ball = contact->GetFixtureB()->GetBody()->GetPosition();
     }
     myFunc1(_ball.x, _ball.y, m_point.x, m_point.y);
     b2Vec2 _b2 = mBallBody->GetLinearVelocity();
@@ -304,18 +317,18 @@ void HelloWorld::BeginContact(b2Contact* contact)
     {
         myFunc2(_obj.x, _obj.y)?mBallBody->SetAngularVelocity(velocity):mBallBody->SetAngularVelocity(-velocity);
     }
+
+}
+void HelloWorld::PostSolve(b2Contact* contact, const b2ContactImpulse* impulse)
+{
     
 }
 
-void HelloWorld::EndContact(b2Contact* contact)
-{
-   mBallBody->SetAngularVelocity(0);
-}
 void HelloWorld::draw(Renderer *renderer, const Mat4 &transform, uint32_t flags)
 {
     Layer::draw(renderer, transform, flags);
     Director* director = Director::getInstance();
-    CCASSERT(nullptr != director, "Director is null when seting matrix stack");
+   // CCASSERT(nullptr != director, "Director is null when seting matrix stack");
     director->pushMatrix(MATRIX_STACK_TYPE::MATRIX_STACK_MODELVIEW);
     director->loadMatrix(MATRIX_STACK_TYPE::MATRIX_STACK_MODELVIEW, transform);
     

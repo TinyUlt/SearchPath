@@ -26,6 +26,9 @@ public:
     bool onTouchBegan(Touch* touch, Event* event);
     virtual void BeginContact(b2Contact* contact);
     virtual void EndContact(b2Contact* contact);
+    virtual void PreSolve(b2Contact* contact, const b2Manifold* oldManifold);
+    virtual void PostSolve(b2Contact* contact, const b2ContactImpulse* impulse);
+
     //void onTouchMoved(Touch* touch, Event* event);
     //void onTouchEnded(Touch* touch, Event* event);
     virtual bool MouseDown(const b2Vec2& p);
