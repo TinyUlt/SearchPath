@@ -26,6 +26,7 @@ bool HelloWorld::init()
     {
         return false;
     }
+   //float _radian = CC_RADIANS_TO_DEGREES( atan(-1));
     
     Size visibleSize = Director::getInstance()->getVisibleSize();
     Vec2 origin = Director::getInstance()->getVisibleOrigin();
@@ -65,11 +66,18 @@ bool HelloWorld::init()
 
     // add "HelloWorld" splash screen
     
+    Vec2 winSize = Director::getInstance()->getWinSize();
+    m_mapSize = winSize;
+    //this->setScale(0.5);
     
-    
-    
-    velocity = 5;
-    
+    velocity = 10;
+    m_center = b2Vec2( winSize.x/2 * PTM_RATIO , winSize.y /2 * PTM_RATIO);
+    m_point = m_center;
+    m_isReCalculate = false;
+    m_mouseJoint = NULL;
+    m_enabelMove = false;
+    m_enableCenter = false;
+    m_isScaring = false;
     //设置地球和绘图
     {
         b2Vec2 gravity;
@@ -126,7 +134,7 @@ bool HelloWorld::init()
                 bodyDefRe.type = b2_staticBody;
                 bodyDef.linearDamping = 0;
                 bodyDef.angularDamping = 0;
-                bodyDefRe.position.Set((Director::getInstance()->getWinSize().width/3 * i + 200 ) * PTM_RATIO,(Director::getInstance()->getWinSize().height/3 * j + 130)* PTM_RATIO); //初始位置
+                bodyDefRe.position.Set((winSize.x/3 * i + 200 ) * PTM_RATIO,(winSize.y/3 * j + 130)* PTM_RATIO); //初始位置
                 ReBody = mWorld->CreateBody(&bodyDefRe);
                 
                 //申请到之后设置物体属性
@@ -173,7 +181,7 @@ bool HelloWorld::init()
         bodyDef.type = b2_dynamicBody;
         bodyDef.linearDamping = 0;
         bodyDef.angularDamping = 0;
-        bodyDef.position.Set((Director::getInstance()->getWinSize().width - 400) * PTM_RATIO/2,Director::getInstance()->getWinSize().height * PTM_RATIO/2); //初始位置
+        bodyDef.position.Set((winSize.x/2) * PTM_RATIO,winSize.y /2 * PTM_RATIO); //初始位置
         mBallBody = mWorld->CreateBody(&bodyDef);
         
         //申请到之后设置物体属性
@@ -204,12 +212,12 @@ bool HelloWorld::init()
     
     //添加触摸事件
     // Adds Touch Event Listener
-    auto listener = EventListenerTouchOneByOne::create();
-    listener->setSwallowTouches(true);//
+    auto listener = EventListenerTouchAllAtOnce::create();
+    //listener->setSwallowTouches(false);//
     
-    listener->onTouchBegan = CC_CALLBACK_2(HelloWorld::onTouchBegan, this);
-//    listener->onTouchMoved = CC_CALLBACK_2(HelloWorld::onTouchMoved, this);
-//    listener->onTouchEnded = CC_CALLBACK_2(HelloWorld::onTouchEnded, this);
+    listener->onTouchesBegan = std::bind(&HelloWorld::onTouchesBegan,this,std::placeholders::_1, std::placeholders::_2);
+    listener->onTouchesMoved = std::bind(&HelloWorld::onTouchesMoved,this,std::placeholders::_1, std::placeholders::_2);
+    listener->onTouchesEnded = std::bind(&HelloWorld::onTouchesEnded,this,std::placeholders::_1, std::placeholders::_2);
     
     _eventDispatcher->addEventListenerWithFixedPriority(listener, -10);//先被触摸
     _touchListener = listener;
@@ -217,41 +225,220 @@ bool HelloWorld::init()
     this->scheduleUpdate();
     return true;
 }
-bool HelloWorld::onTouchBegan(Touch* touch, Event* event){
-    auto touchLocation = touch->getLocation();
+void HelloWorld::onTouchesBegan(const std::vector<Touch*>& pTouches, Event *pEvent){
     
-    auto nodePosition = convertToNodeSpace( touchLocation );//视图层不是当前场景大小, 所以需要转换视图
-    log("Box2DView::onTouchBegan, pos: %f,%f -> %f,%f", touchLocation.x, touchLocation.y, nodePosition.x, nodePosition.y);
+    if (pTouches.size() == 2) {
+        m_gestureId0Point = pTouches[0]->getLocation();
+        m_gestureId1Point = pTouches[1]->getLocation();
+        auto _offsetp = m_gestureId0Point - m_gestureId1Point;
+        gesturesLenth = sqrt(_offsetp.x*_offsetp.x + _offsetp.y*_offsetp.y);
+        m_enabelMove = false;
+        m_isScaring = true;
+        return;
+
+    }
     
-    return MouseDown(b2Vec2(nodePosition.x*PTM_RATIO,nodePosition.y*PTM_RATIO));
+    if (pTouches[0]->getID() == 0) {
+        m_gestureId0Point = pTouches[0]->getLocation();
+        m_oldPoint = pTouches[0]->getLocation();
+    }
+    if (pTouches[0]->getID() == 1) {
+        m_gestureId1Point = pTouches[0]->getLocation();
+        auto _offsetp = m_gestureId0Point - m_gestureId1Point;
+        gesturesLenth = sqrt(_offsetp.x*_offsetp.x + _offsetp.y*_offsetp.y);
+        m_enabelMove = false;
+        m_isScaring = true;
+        return;
+    }
+    
+    
+    //m_enableCenter = true;
+    m_isScaring = false;//不正在缩放
+    m_enabelMove = true;//允许点击屏幕小球移动
+   
     
 }
+void HelloWorld::onTouchesMoved(const std::vector<Touch*>& pTouches, Event *pEvent){
+//    auto touchLocation = touch->getLocation();
+//    auto nodePosition = convertToNodeSpace( touchLocation );
+//    
+//    log("Box2DView::onTouchMoved, pos: %f,%f -> %f,%f", touchLocation.x, touchLocation.y, nodePosition.x, nodePosition.y);
+//    
+//    MouseMove(b2Vec2(nodePosition.x*PTM_RATIO,nodePosition.y*PTM_RATIO));
+    if (pTouches.size() == 1 && !m_isScaring) {//移动
+        auto _offsetPoint = m_oldPoint - pTouches[0]->getLocation();
+        auto _offsetLenth = sqrt(_offsetPoint.x* _offsetPoint.x + _offsetPoint.y*_offsetPoint.y);
+        if (_offsetLenth <1) {
+            return;
+        }
+        log("%f, %f", _offsetPoint.x, _offsetPoint.y);
+        this->setPosition(this->getPosition() - _offsetPoint * (1/this->getScale()));
+        this->setAnchorPoint(Vec2(-this->getPositionX()/ m_mapSize.x + 0.5,-this->getPositionY()/ m_mapSize.y + 0.5));
+        m_oldPoint = pTouches[0]->getLocation();
+        //m_enableCenter = false;
+        m_enabelMove = false;//移动成功后不能点击屏幕移动小球
+    }
+    if (pTouches.size() == 2) {//放大
+        
+        auto _1p = pTouches[0]->getLocation();
+        auto _2p = pTouches[1]->getLocation();
+//        if (m_gestureId0Point != _1p && m_gestureId1Point != _2p )
+//        {
+            auto _offsetp = _1p - _2p;
+            float lenth = sqrt(_offsetp.x*_offsetp.x + _offsetp.y*_offsetp.y);
+            //log("%f", lenth);
+            float _lenthOffset = lenth - gesturesLenth;
+            
+            
+            this->setScale(this->getScale() + _lenthOffset*0.001);
+        if (this->getScale()<0.2) {
+            this->setScale(0.2);
+        }
+        if (this->getScale()>3) {
+            this->setScale(3);
+        }
+            
+            gesturesLenth = lenth;
+//            m_gestureId0Point = _1p;
+//            m_gestureId1Point = _2p;
+//        }
+
+        
+    }
+    
+}
+void HelloWorld::onTouchesEnded(const std::vector<Touch*>& pTouches, Event *pEvent){
+//    auto touchLocation = touch->getLocation();
+//    auto nodePosition = convertToNodeSpace( touchLocation );
+//    
+//    log("Box2DView::onTouchEnded, pos: %f,%f -> %f,%f", touchLocation.x, touchLocation.y, nodePosition.x, nodePosition.y);
+//    
+//    MouseUp(b2Vec2(nodePosition.x*PTM_RATIO,nodePosition.y*PTM_RATIO));
+    
+    
+    if (m_enabelMove) {
+        for (auto& touch : pTouches)
+        {
+            if(!touch)
+                break;
+            
+            log("touch id: %d",  touch->getID());
+            auto touchLocation = touch->getLocation();
+            
+            auto nodePosition = convertToNodeSpace( touchLocation );//视图层不是当前场景大小, 所以需要转换视图
+            log("Box2DView::onTouchBegan, pos: %f,%f -> %f,%f", touchLocation.x, touchLocation.y, nodePosition.x, nodePosition.y);
+            
+            
+            MouseDown(b2Vec2(nodePosition.x*PTM_RATIO,nodePosition.y*PTM_RATIO));
+            
+        }
+
+    }
+    
+}
+
 bool HelloWorld::MouseDown(const b2Vec2& p)
 {
     m_point = p;
     mBallBody->SetAngularVelocity(0);
+    m_isReCalculate = true;
+    
+    
+    
+    
+    m_mouseWorld = p;
+    
+    if (m_mouseJoint != nullptr)
+    {
+        return false;
+    }
+    
+    // Make a small box.
+    b2AABB aabb;
+    b2Vec2 d;
+    d.Set(0.001, 0.001);
+    aabb.lowerBound = p - d;
+    aabb.upperBound = p + d;
+    
+    // Query the world for overlapping shapes.
+    QueryCallback callback(p);
+    mWorld->QueryAABB(&callback, aabb);
+    
+    if (callback.m_fixture)
+    {
+        b2Body* body = callback.m_fixture->GetBody();
+        b2MouseJointDef md;
+        md.bodyA = m_groundBody;
+        md.bodyB = body;
+        md.target = p;
+        md.maxForce = 1000.0f * body->GetMass();
+        m_mouseJoint = (b2MouseJoint*)mWorld->CreateJoint(&md);
+        body->SetAwake(true);
+        return true;
+    }
 
-    return true;
+    
+    
+    
+    return false;
 }
+
+void HelloWorld::MouseMove(const b2Vec2& p)
+{
+    m_mouseWorld = p;
+    
+    if (m_mouseJoint)
+    {
+        m_mouseJoint->SetTarget(p);
+    }
+}
+
+void HelloWorld::MouseUp(const b2Vec2& p)
+{
+    if (m_mouseJoint)
+    {
+        mWorld->DestroyJoint(m_mouseJoint);
+        m_mouseJoint = nullptr;
+    }
+    
+    //    if (m_bombSpawning)
+    //    {
+    //        CompleteBombSpawn(p);
+    //    }
+}
+
 void HelloWorld::moveBall()
 {
     b2Vec2 _b2 =mBallBody->GetPosition();
     float _dtx = (m_point.x - _b2.x);
     float _dty = (m_point.y - _b2.y);
-    float _tan = _dty/_dtx ;
-    float _radian = tanh(_tan);
-    //float velocity = 5;
-    //float _x, _y;
-    if (_dtx >= 0 ) {
-        m_x = velocity * cos(_radian);
-        m_y = velocity * sin(_radian);
+    float _lenth = sqrt(_dtx*_dtx + _dty*_dty);
+    
+    if (m_isReCalculate) {
+        float _tan = _dtx/_dty ;
+        float _radian ;
+        //float velocity = 5;
+        //float _x, _y;
+        if (_dty >=0) {
+            _radian = atan(_tan);
+        }
+        else  {
+            _radian = PI + atan(_tan);
+        }
+        
+        m_x = velocity * sin(_radian);
+        m_y = velocity * cos(_radian);
+
+        m_isReCalculate = false;
+
     }
-    else if ( _dtx <=0 ){
-        m_x = -velocity * cos(_radian);
-        m_y = -velocity * sin(_radian);
+        //mBallBody->ApplyForceToCenter(b2Vec2(m_x,m_y), true);
+    if (_lenth<0.2) {
+        mBallBody->SetLinearVelocity(b2Vec2(0,0));
     }
-    //mBallBody->ApplyForceToCenter(b2Vec2(m_x,m_y), true);
-    mBallBody->SetLinearVelocity(b2Vec2(m_x,m_y));
+    else{
+        mBallBody->SetLinearVelocity(b2Vec2(m_x,m_y));
+    }
 
 }
 void HelloWorld::update(float delta)
@@ -261,6 +448,12 @@ void HelloWorld::update(float delta)
     
     mWorld->Step(delta, velocityIterations, positionIterations);
     //mWorld->ClearForces();
+    b2Vec2 _b2 =mBallBody->GetPosition();
+    b2Vec2 _offset = _b2 - m_center;
+    
+    if (m_enableCenter) {
+        this->setPosition(Vec2(int (-_offset.x / PTM_RATIO * this->getScale()), int (-_offset.y / PTM_RATIO* this->getScale())));
+    }
     
 //    mBallBody->ApplyForceToCenter(b2Vec2(10,0), true);
 //    b2Vec2 _b2 = mBallBody->GetLinearVelocity();
@@ -296,6 +489,9 @@ void HelloWorld::EndContact(b2Contact* contact)
 
 void HelloWorld::PreSolve(b2Contact* contact, const b2Manifold* oldManifold)
 {
+    b2Vec2 _velocity = mBallBody->GetLinearVelocity();
+    float _lenthVelocity = sqrt(_velocity.x*_velocity.x + _velocity.y * _velocity.y);
+    //log("%f , %f" ,_velocity.x, _velocity.y);
     
     b2Vec2 _ball;
     b2Vec2 _obj;
@@ -318,6 +514,7 @@ void HelloWorld::PreSolve(b2Contact* contact, const b2Manifold* oldManifold)
         myFunc2(_obj.x, _obj.y)?mBallBody->SetAngularVelocity(velocity):mBallBody->SetAngularVelocity(-velocity);
     }
 
+    m_isReCalculate = true;
 }
 void HelloWorld::PostSolve(b2Contact* contact, const b2ContactImpulse* impulse)
 {
