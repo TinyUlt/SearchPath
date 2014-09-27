@@ -9,6 +9,20 @@
 #define PI 3.14159265
 USING_NS_CC;
 using namespace std;
+
+enum ShapeType{
+    Box,
+    Circle
+};
+struct BodyInformation
+{
+    float m_width;
+    float m_height;
+    float m_radian;
+    ShapeType m_shapeType;
+    Sprite* m_sprite;
+    
+};
 class HelloWorld : public cocos2d::Layer,public b2ContactListener
 {
 public:
@@ -66,6 +80,8 @@ public:
     bool m_isReCalculate;
     //小球的速度
     float velocity ;
+    //小球到终点旧的长度
+    float m_oldPathLenth;
     
     //手势缩放的长度
     float gesturesLenth;
@@ -82,6 +98,19 @@ public:
     bool m_isScaring;
     //地图大小
     Vec2 m_mapSize;
+    //
+    b2Joint* m_joint;
+    //
+    b2Body* m_touchObj;
+    //
+    float m_de;
+    
+    vector<b2Body*> m_allB2bodys;
+    
+    b2Vec2 getTeminalPoint(b2Vec2);
+    float calculateRadianByTwoPoint(b2Vec2 p1, b2Vec2 p2);
+    b2Vec2 calculateTeminalPointByRadianAndLenth(float radian, float lenth);
+    float calculateLenthByTwoPoint(b2Vec2 p1, b2Vec2 p2);
 };
 
 class QueryCallback : public b2QueryCallback
@@ -96,7 +125,7 @@ public:
     virtual bool ReportFixture(b2Fixture* fixture)
     {
         b2Body* body = fixture->GetBody();
-        if (body->GetType() == b2_dynamicBody)
+        if (body->GetType() == b2_staticBody)
         {
             bool inside = fixture->TestPoint(m_point);
             if (inside)

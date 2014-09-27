@@ -78,6 +78,8 @@ bool HelloWorld::init()
     m_enabelMove = false;
     m_enableCenter = false;
     m_isScaring = false;
+    m_joint = NULL;
+    m_touchObj = NULL;
     //设置地球和绘图
     {
         b2Vec2 gravity;
@@ -136,7 +138,7 @@ bool HelloWorld::init()
                 bodyDef.angularDamping = 0;
                 bodyDefRe.position.Set((winSize.x/3 * i + 200 ) * PTM_RATIO,(winSize.y/3 * j + 130)* PTM_RATIO); //初始位置
                 ReBody = mWorld->CreateBody(&bodyDefRe);
-                
+                m_allB2bodys.push_back(ReBody);
                 //申请到之后设置物体属性
                 {
                     if (i ==1) {
@@ -149,6 +151,12 @@ bool HelloWorld::init()
                         fixtureDef.restitution = 0.0f;
                         
                         ReBody->CreateFixture(&fixtureDef);
+                        
+                        BodyInformation* _info = new BodyInformation;
+                        _info->m_shapeType = Box;
+                        _info->m_width = 3;
+                        _info->m_height = 2;
+                        ReBody->SetUserData(_info);
                     }
                     else
                     {
@@ -161,6 +169,13 @@ bool HelloWorld::init()
                         fixtureDef.restitution = 0.0f;
                         
                         ReBody->CreateFixture(&fixtureDef);
+                        
+                        BodyInformation* _info = new BodyInformation;
+                        _info->m_shapeType = Circle;
+                        _info->m_radian = 2.0f;
+                        ReBody->SetUserData(_info);
+                        
+                        
                     }
                     
                     
@@ -181,13 +196,16 @@ bool HelloWorld::init()
         bodyDef.type = b2_dynamicBody;
         bodyDef.linearDamping = 0;
         bodyDef.angularDamping = 0;
-        bodyDef.position.Set((winSize.x/2) * PTM_RATIO,winSize.y /2 * PTM_RATIO); //初始位置
+        bodyDef.position.Set((winSize.x/2 - 150) * PTM_RATIO,winSize.y /2 * PTM_RATIO); //初始位置
         mBallBody = mWorld->CreateBody(&bodyDef);
         
         //申请到之后设置物体属性
         {
             b2CircleShape shape;
             shape.m_radius = 1.0f;
+            
+//            b2PolygonShape shape;
+//            shape.SetAsBox(1,1);
             
             b2FixtureDef fixtureDef;
             fixtureDef.shape = & shape;
@@ -197,6 +215,11 @@ bool HelloWorld::init()
             //fixtureDef.filter.groupIndex = -8;
             
             mBallBody->CreateFixture(&fixtureDef);
+            
+            BodyInformation* _info = new BodyInformation;
+            _info->m_shapeType = Circle;
+            _info->m_radian = 1.0f;
+            mBallBody->SetUserData(_info);
         }
         
         //让小球有冲力
@@ -326,7 +349,7 @@ void HelloWorld::onTouchesEnded(const std::vector<Touch*>& pTouches, Event *pEve
             auto touchLocation = touch->getLocation();
             
             auto nodePosition = convertToNodeSpace( touchLocation );//视图层不是当前场景大小, 所以需要转换视图
-            log("Box2DView::onTouchBegan, pos: %f,%f -> %f,%f", touchLocation.x, touchLocation.y, nodePosition.x, nodePosition.y);
+            log("Box2DView::onTouchBegan, pos: %f,%f -> %f,%f", touchLocation.x, touchLocation.y, nodePosition.x * PTM_RATIO, nodePosition.y * PTM_RATIO);
             
             
             MouseDown(b2Vec2(nodePosition.x*PTM_RATIO,nodePosition.y*PTM_RATIO));
@@ -336,21 +359,130 @@ void HelloWorld::onTouchesEnded(const std::vector<Touch*>& pTouches, Event *pEve
     }
     
 }
+b2Vec2 HelloWorld::getTeminalPoint(b2Vec2 p){
+    for (int i = 0; i < m_allB2bodys.size(); i ++) {
+        b2Body* _body = m_allB2bodys[i];
+        BodyInformation* _info = (BodyInformation*)(_body->GetUserData());
+        
+        if (_info->m_shapeType == Circle) {
+            b2Vec2 _objCenter = _body->GetPosition();
+            float _lenth = calculateLenthByTwoPoint(p, _objCenter);
+            float _maxTouchLenth = ((BodyInformation*)(mBallBody->GetUserData()))->m_radian + _info->m_radian;
+            if (_lenth < _maxTouchLenth) {//如果触摸点在圆形区域周边或里面
+                float _radian = calculateRadianByTwoPoint(p, _objCenter);
+                b2Vec2 _point = calculateTeminalPointByRadianAndLenth(_radian, _maxTouchLenth);
+                return -_point+_objCenter;
+            }
+        }
+        else if(_info->m_shapeType == Box)
+        {
+            b2Vec2 _objCenter = _body->GetPosition();
+            float _maxWidth = ((BodyInformation*)(mBallBody->GetUserData()))->m_radian + _info->m_width;
+            float _maxHeight = ((BodyInformation*)(mBallBody->GetUserData()))->m_radian + _info->m_height;
+            b2Vec2 _lowPoint = _objCenter - b2Vec2(_maxWidth, _maxHeight);
+            b2Vec2 _hightPoint = _objCenter + b2Vec2(_maxWidth, _maxHeight);
+            if (p.x > _lowPoint.x && p.y > _lowPoint.y && p.x < _hightPoint.x && p.y < _hightPoint.y) {
+                float _offsetWidth = p.x - _objCenter.x;
+                float _offsetHeight = p.y - _objCenter.y;
+                b2Vec2 _point;
+                
+                if (_offsetWidth>=0 && _offsetHeight>=0) {
+                    if ( _offsetWidth > _offsetHeight) {
+                        _point.y = p.y;
+                        _point.x = _hightPoint.x;
+                    }else{
+                        _point.x = p.x;
+                        _point.y = _hightPoint.y;
+                    }
+                }
+                else if(_offsetWidth>=0 && _offsetHeight<=0){
+                    if ( _offsetWidth > -_offsetHeight) {
+                        _point.y = p.y;
+                        _point.x = _hightPoint.x;
+                    }else{
+                        _point.x = p.x;
+                        _point.y = _lowPoint.y;
+                    }
+                }
+                else if(_offsetWidth<=0 && _offsetHeight<=0){
+                    if ( -_offsetWidth > -_offsetHeight) {
+                        _point.y = p.y;
+                        _point.x = _lowPoint.x;
+                    }else{
+                        _point.x = p.x;
+                        _point.y = _lowPoint.y;
+                    }
+                }
+                else if(_offsetWidth<=0 && _offsetHeight>=0){
+                    if ( -_offsetWidth > _offsetHeight) {
+                        _point.y = p.y;
+                        _point.x = _lowPoint.x;
+                    }else{
+                        _point.x = p.x;
+                        _point.y = _hightPoint.y;
+                    }
+                }
+                return _point;
+                
+            }
+            
+        }
+    }
+    return p;
+}
 
+float HelloWorld::calculateRadianByTwoPoint(b2Vec2 originPoint, b2Vec2 teminalPoint)
+{
+    float _dtx = (teminalPoint.x - originPoint.x);
+    float _dty = (teminalPoint.y - originPoint.y);
+    float _tan = _dtx/_dty ;
+    float _radian ;
+    //float velocity = 5;
+    //float _x, _y;
+    if (_dty >=0) {
+        _radian = atan(_tan);
+    }
+    else  {
+        _radian = PI + atan(_tan);
+    }
+
+    return _radian;
+
+}
+b2Vec2 HelloWorld::calculateTeminalPointByRadianAndLenth(float radian, float lenth)
+{
+    float _x = lenth * sin(radian);
+    float _y = lenth * cos(radian);
+    
+    return b2Vec2(_x , _y);
+}
+float HelloWorld::calculateLenthByTwoPoint(b2Vec2 p1, b2Vec2 p2)
+{
+    float _dtx = (p1.x - p2.x);
+    float _dty = (p1.y - p2.y);
+    return sqrt(_dtx*_dtx + _dty*_dty);
+}
 bool HelloWorld::MouseDown(const b2Vec2& p)
 {
-    m_point = p;
-    mBallBody->SetAngularVelocity(0);
+    
+    
+    
+    m_point = getTeminalPoint(p);
+    //mBallBody->SetAngularVelocity(0);
     m_isReCalculate = true;
     
     
+//    b2Vec2 _b2 =mBallBody->GetPosition();
+//    float _dtx = (m_point.x - _b2.x);
+//    float _dty = (m_point.y - _b2.y);
+//    m_oldPathLenth = sqrt(_dtx*_dtx + _dty*_dty);
     
     
     m_mouseWorld = p;
     
-    if (m_mouseJoint != nullptr)
+    if (m_joint != nullptr)
     {
-        return false;
+        mWorld->DestroyJoint(m_joint);
     }
     
     // Make a small box.
@@ -366,15 +498,10 @@ bool HelloWorld::MouseDown(const b2Vec2& p)
     
     if (callback.m_fixture)
     {
-        b2Body* body = callback.m_fixture->GetBody();
-        b2MouseJointDef md;
-        md.bodyA = m_groundBody;
-        md.bodyB = body;
-        md.target = p;
-        md.maxForce = 1000.0f * body->GetMass();
-        m_mouseJoint = (b2MouseJoint*)mWorld->CreateJoint(&md);
-        body->SetAwake(true);
-        return true;
+        m_touchObj = callback.m_fixture->GetBody();
+    }
+    else{
+        m_touchObj = NULL;
     }
 
     
@@ -410,36 +537,18 @@ void HelloWorld::MouseUp(const b2Vec2& p)
 void HelloWorld::moveBall()
 {
     b2Vec2 _b2 =mBallBody->GetPosition();
-    float _dtx = (m_point.x - _b2.x);
-    float _dty = (m_point.y - _b2.y);
-    float _lenth = sqrt(_dtx*_dtx + _dty*_dty);
+    float _lenth = calculateLenthByTwoPoint(m_point, _b2);
     
     if (m_isReCalculate) {
-        float _tan = _dtx/_dty ;
-        float _radian ;
-        //float velocity = 5;
-        //float _x, _y;
-        if (_dty >=0) {
-            _radian = atan(_tan);
-        }
-        else  {
-            _radian = PI + atan(_tan);
-        }
-        
-        m_x = velocity * sin(_radian);
-        m_y = velocity * cos(_radian);
-
+        float _radian = calculateRadianByTwoPoint(_b2, m_point);
         m_isReCalculate = false;
-
+        mBallBody->SetLinearVelocity(calculateTeminalPointByRadianAndLenth(_radian, velocity));
+        
     }
-        //mBallBody->ApplyForceToCenter(b2Vec2(m_x,m_y), true);
-    if (_lenth<0.2) {
+    if (_lenth<0.2)
+    {
         mBallBody->SetLinearVelocity(b2Vec2(0,0));
     }
-    else{
-        mBallBody->SetLinearVelocity(b2Vec2(m_x,m_y));
-    }
-
 }
 void HelloWorld::update(float delta)
 {
@@ -478,13 +587,25 @@ bool HelloWorld::myFunc2(float x, float y)
 }
 void HelloWorld::BeginContact(b2Contact* contact)
 {
-    //B2_NOT_USED(contact);
+//    b2Vec2 _b2 =mBallBody->GetPosition();
+//    float _dtx = (m_point.x - _b2.x);
+//    float _dty = (m_point.y - _b2.y);
+//    float _lenth = sqrt(_dtx*_dtx + _dty*_dty);
+//    if (m_oldPathLenth <= _lenth+0.1 && m_oldPathLenth >= _lenth-0.1/*_objBody == m_touchObj*/) {//如果是和触摸的物体接触
+//        //mBallBody->SetAngularVelocity(0);
+//        mBallBody->SetLinearVelocity(b2Vec2(0,0));
+//        m_isReCalculate = false;
+//    }
+//    else
+//    {
+//        m_oldPathLenth = _lenth;
+//    }
     
 }
 
 void HelloWorld::EndContact(b2Contact* contact)
 {
-   mBallBody->SetAngularVelocity(0);
+   //mBallBody->SetAngularVelocity(0);
 }
 
 void HelloWorld::PreSolve(b2Contact* contact, const b2Manifold* oldManifold)
@@ -495,26 +616,50 @@ void HelloWorld::PreSolve(b2Contact* contact, const b2Manifold* oldManifold)
     
     b2Vec2 _ball;
     b2Vec2 _obj;
+    
+    b2Body* _objBody;
     if (mBallBody == contact->GetFixtureA()->GetBody()) {
         _ball = contact->GetFixtureA()->GetBody()->GetPosition();
         _obj = contact->GetFixtureB()->GetBody()->GetPosition();
+        _objBody = contact->GetFixtureB()->GetBody();
     }
     else
     {
         _obj = contact->GetFixtureA()->GetBody()->GetPosition();
         _ball = contact->GetFixtureB()->GetBody()->GetPosition();
+        _objBody = contact->GetFixtureA()->GetBody();
     }
-    myFunc1(_ball.x, _ball.y, m_point.x, m_point.y);
-    b2Vec2 _b2 = mBallBody->GetLinearVelocity();
-    if (_b2.x > 0) {
-        myFunc2(_obj.x, _obj.y)?mBallBody->SetAngularVelocity(-velocity):mBallBody->SetAngularVelocity(velocity);
+    
+    b2Vec2 _b2 =mBallBody->GetPosition();
+    float _dtx = (m_point.x - _b2.x);
+    float _dty = (m_point.y - _b2.y);
+    float _lenth = sqrt(_dtx*_dtx + _dty*_dty);
+    
+    if (0/*_objBody == m_touchObj*/) {//如果是和触摸的物体接触
+        //mBallBody->SetAngularVelocity(0);
+        
+        mBallBody->SetLinearVelocity(b2Vec2(0,0));
+        m_isReCalculate =false;
+        //contact->SetEnabled(false);
     }
     else
     {
-        myFunc2(_obj.x, _obj.y)?mBallBody->SetAngularVelocity(velocity):mBallBody->SetAngularVelocity(-velocity);
+        myFunc1(_ball.x, _ball.y, m_point.x, m_point.y);
+        b2Vec2 _b2 = mBallBody->GetLinearVelocity();
+        if (_b2.x > 0) {
+            //myFunc2(_obj.x, _obj.y)?mBallBody->SetAngularVelocity(-velocity):mBallBody->SetAngularVelocity(velocity);
+            myFunc2(_obj.x, _obj.y)?contact->SetTangentSpeed(velocity):contact->SetTangentSpeed(-velocity);;
+        }
+        else
+        {
+            //myFunc2(_obj.x, _obj.y)?mBallBody->SetAngularVelocity(velocity):mBallBody->SetAngularVelocity(-velocity);
+            myFunc2(_obj.x, _obj.y)?contact->SetTangentSpeed(-velocity):contact->SetTangentSpeed(velocity);;
+        }
+        
+        m_isReCalculate = true;
+        m_oldPathLenth = _lenth;
     }
-
-    m_isReCalculate = true;
+    
 }
 void HelloWorld::PostSolve(b2Contact* contact, const b2ContactImpulse* impulse)
 {
